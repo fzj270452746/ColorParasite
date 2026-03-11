@@ -31,6 +31,7 @@ final class ChrysalisArena: SKScene {
     private var phase: ArenaPhase = .preparing
     private var isShackledNext: Bool = false
     private var colonizedIdentifiers: Set<String> = []
+    private var currentLatticePosition: CGPoint = .zero
 
     private var safeAreaPadding: UIEdgeInsets = .zero
 
@@ -129,6 +130,9 @@ final class ChrysalisArena: SKScene {
             originNode.alpha = 0.4
             colonizedIdentifiers.insert(blueprint.originIdentifier)
         }
+
+        // Track symbiont's lattice position
+        currentLatticePosition = originSpec.latticePosition
     }
 
     private func fabricateCorpuscle(from spec: CorpuscleSpec, radius: CGFloat) -> CorpuscleNode {
@@ -214,7 +218,20 @@ final class ChrysalisArena: SKScene {
 
     // MARK: - Colonization Logic
 
+    private func isAdjacent(to target: CorpuscleNode) -> Bool {
+        let dx = abs(currentLatticePosition.x - target.spec.latticePosition.x)
+        let dy = abs(currentLatticePosition.y - target.spec.latticePosition.y)
+        let distance = sqrt(dx * dx + dy * dy)
+        return distance <= 1.6
+    }
+
     private func attemptColonization(of target: CorpuscleNode) {
+        // Must be adjacent in the lattice
+        if !isAdjacent(to: target) {
+            target.run(KinesisFactory.rejectionTremor())
+            return
+        }
+
         // If shackled, must match current color
         if isShackledNext {
             if let targetChroma = target.spec.chroma, targetChroma != symbiont.currentChroma {
@@ -266,6 +283,9 @@ final class ChrysalisArena: SKScene {
         target.executeColonizationKinesis { }
         colonizedIdentifiers.insert(target.spec.identifier)
 
+        // Update lattice position to target
+        currentLatticePosition = target.spec.latticePosition
+
         // Handle special orb effects
         handleSpecialEffects(of: target) { [weak self] in
             guard let self = self else { return }
@@ -303,6 +323,8 @@ final class ChrysalisArena: SKScene {
                 SKAction.fadeAlpha(to: 1.0, duration: 0.15)
             ])
             symbiont.run(teleportAction) {
+                // Update lattice position to wormhole partner
+                self.currentLatticePosition = partner.spec.latticePosition
                 // Don't mark partner as colonized — player can colonize from there
                 completion()
             }
@@ -372,6 +394,7 @@ final class ChrysalisArena: SKScene {
 
         currentCadence = 0
         isShackledNext = false
+        currentLatticePosition = .zero
         phase = .preparing
 
         diadem.removeFromParent()
